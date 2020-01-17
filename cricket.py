@@ -14,7 +14,7 @@ from scipy import stats
 from tqdm import tqdm
 import yaml
 
-DB_FILE = Path('F/Databases/cricket/cricket.db')
+DB_FILE = Path('F:/Databases/cricket/cricket.db')
 
 
 def db_connect():
@@ -276,12 +276,13 @@ def update_match_list():
         #                 'date_start': match['info']['dates'][0],
         #                 'revision': match['meta']['revision']
         #                 })
-        details = (file.stem, match['info']['teams'][0], match['info']['teams'][1],
-                   match['info']['venue'], match['info']['match_type_number'],
-                   match['info']['dates'][0], match['meta']['revision'])
+        info = match['info']
+        details = (file.stem, info['teams'][0], info['teams'][1],
+                   info['venue'], info.get('match_type_number', None),
+                   info['dates'][0], match['meta']['revision'])
 
         curs.execute('''INSERT INTO tests (file_id, home_team, away_team, venue, 
-                                           match_number, date_start, revision 
+                                           match_number, date_start, revision) 
                                    VALUES (?, ?, ?, ?, ?, ?, ?);''', details)
 
     conn.commit()
@@ -291,4 +292,5 @@ if __name__ == "__main__":
     # halfway_scatter(10000, 'odis')
     # over_scores(10000, 'odis')
     # find_halfway_point()
-    conversion_rate(from_csv=True)
+    # conversion_rate(from_csv=True)
+    update_match_list()
