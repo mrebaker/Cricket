@@ -1,11 +1,16 @@
+
+
 from datetime import datetime
 import os
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy
 import pandas as pd
+import plotly.express as px
 from scipy import stats
+from tqdm import tqdm
 import yaml
 
 
@@ -195,7 +200,50 @@ def plot_over_scores():
     plt.show()
 
 
+def conversion_rate(from_csv=True):
+    if from_csv:
+        df = pd.read_csv('tests/tests.csv')
+    else:
+        matches = {}
+        files = list(Path('tests').glob('**/*.yaml'))
+        for file in tqdm(files):
+            match = yaml.safe_load(file.read_text())
+            for innings in match['innings']:
+                players = {}
+                for key, value in innings.items():
+                    if key[-7:] == 'innings':
+                        for ball in value['deliveries']:
+                            for b, details in ball.items():
+                                try:
+                                    players[details['batsman']] += details.get('runs', 0).get('batsman', 0)
+                                except KeyError:
+                                    players[details['batsman']] = details.get('runs', 0).get('batsman', 0)
+
+                    matches[file.stem] = {key: players}
+
+        df = pd.DataFrame.from_dict({(i, j, k): matches[i][j][k] for i in matches.keys()
+                                     for j in matches[i].keys()
+                                     for k in matches[i][j].keys()},
+                                    orient='index').reset_index()
+        df[['match', 'innings', 'batsman']] = pd.DataFrame(df['index'].tolist(), index=df.index)
+        df = df.drop('index', axis=1)
+        df = df.rename(columns={0: 'runs'})
+        df.to_csv('tests/tests.csv')
+
+    df = df[['batsman', 'runs']]
+    all_innings = df.groupby('batsman').count()
+    filtered = df[df['runs'] >= 10].groupby('batsman').count()
+
+    conversion = all_innings.merge(filtered, on='batsman', how='left', suffixes=('_all', '_filtered'))
+    conversion['ratio'] = conversion['runs_filtered'] / conversion['runs_all']
+    conversion = conversion.fillna(0)
+    conversion = conversion.sort_values('ratio', ascending=False)
+
+    print(conversion.loc['JL Denly'])
+
+
 if __name__ == "__main__":
     # halfway_scatter(10000, 'odis')
     # over_scores(10000, 'odis')
-    find_halfway_point()
+    # find_halfway_point()
+    conversion_rate(from_csv=True)
