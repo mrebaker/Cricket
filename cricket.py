@@ -3,6 +3,7 @@
 from datetime import datetime
 import os
 from pathlib import Path
+import sqlite3
 
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -12,6 +13,14 @@ import plotly.express as px
 from scipy import stats
 from tqdm import tqdm
 import yaml
+
+DB_FILE = Path('F/Databases/cricket/cricket.db')
+
+
+def db_connect():
+    conn = sqlite3.connect(DB_FILE)
+    curs = conn.cursor()
+    return conn, curs
 
 
 def halfway_scatter(n, folder):
@@ -208,6 +217,7 @@ def conversion_rate(from_csv=True):
         files = list(Path('tests').glob('**/*.yaml'))
         for file in tqdm(files):
             match = yaml.safe_load(file.read_text())
+            matches[file.stem] = {}
             for innings in match['innings']:
                 players = {}
                 for key, value in innings.items():
@@ -219,7 +229,7 @@ def conversion_rate(from_csv=True):
                                 except KeyError:
                                     players[details['batsman']] = details.get('runs', 0).get('batsman', 0)
 
-                    matches[file.stem] = {key: players}
+                    matches[file.stem][key] = players
 
         df = pd.DataFrame.from_dict({(i, j, k): matches[i][j][k] for i in matches.keys()
                                      for j in matches[i].keys()
@@ -239,7 +249,42 @@ def conversion_rate(from_csv=True):
     conversion = conversion.fillna(0)
     conversion = conversion.sort_values('ratio', ascending=False)
 
-    print(conversion.loc['JL Denly'])
+    print(conversion[conversion['runs_all'] > 9])
+
+
+def update_match_list():
+    conn, curs = db_connect()
+    curs.execute('''CREATE TABLE IF NOT EXISTS tests (
+                    id INTEGER PRIMARY KEY,
+                    file_id OBJECT UNIQUE,
+                    home_team OBJECT,
+                    away_team OBJECT,
+                    venue OBJECT,
+                    match_number INTEGER,
+                    date_start OBJECT,
+                    revision INTEGER                 
+                    ) ;''')
+
+    files = list(Path('tests').glob('**/*.yaml'))
+    for file in tqdm(files):
+        match = yaml.safe_load(file.read_text())
+        # matches.append({'file_id': file.stem,
+        #                 'home_team': match['info']['teams'][0],
+        #                 'away_team': match['info']['teams'][1],
+        #                 'venue': match['info']['venue'],
+        #                 'match_number': match['info']['match_type_number'],
+        #                 'date_start': match['info']['dates'][0],
+        #                 'revision': match['meta']['revision']
+        #                 })
+        details = (file.stem, match['info']['teams'][0], match['info']['teams'][1],
+                   match['info']['venue'], match['info']['match_type_number'],
+                   match['info']['dates'][0], match['meta']['revision'])
+
+        curs.execute('''INSERT INTO tests (file_id, home_team, away_team, venue, 
+                                           match_number, date_start, revision 
+                                   VALUES (?, ?, ?, ?, ?, ?, ?);''', details)
+
+    conn.commit()
 
 
 if __name__ == "__main__":
