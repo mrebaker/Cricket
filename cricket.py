@@ -19,8 +19,16 @@ DB_FILE = Path('F:/Databases/cricket/cricket.db')
 
 def db_connect():
     conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = dict_factory
     curs = conn.cursor()
     return conn, curs
+
+
+def dict_factory(cursor, row):
+    d = {}
+    for idx, col in enumerate(cursor.description):
+        d[col[0]] = row[idx]
+    return d
 
 
 def halfway_scatter(n, folder):
@@ -268,19 +276,17 @@ def update_match_list():
     files = list(Path('tests').glob('**/*.yaml'))
     for file in tqdm(files):
         match = yaml.safe_load(file.read_text())
-        # matches.append({'file_id': file.stem,
-        #                 'home_team': match['info']['teams'][0],
-        #                 'away_team': match['info']['teams'][1],
-        #                 'venue': match['info']['venue'],
-        #                 'match_number': match['info']['match_type_number'],
-        #                 'date_start': match['info']['dates'][0],
-        #                 'revision': match['meta']['revision']
-        #                 })
         info = match['info']
+
+        existing_record = curs.execute('''SELECT id, file_id, revision 
+                                          FROM tests
+                                          WHERE file_id = ?;''', (file.stem, )).fetchone()
+        if existing_record and existing_record['revision'] >= match['meta']['revision']:
+            continue
+
         details = (file.stem, info['teams'][0], info['teams'][1],
                    info['venue'], info.get('match_type_number', None),
                    info['dates'][0], match['meta']['revision'])
-
         curs.execute('''INSERT INTO tests (file_id, home_team, away_team, venue, 
                                            match_number, date_start, revision) 
                                    VALUES (?, ?, ?, ?, ?, ?, ?);''', details)
